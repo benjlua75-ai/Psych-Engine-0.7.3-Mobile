@@ -446,7 +446,27 @@ class PlayState extends MusicBeatState
 		dadGroup.add(dad);
 		startCharacterScripts(dad.curCharacter);
 
-		boyfriend = new Character(0, 0, SONG.player1, true);
+		var bfName:String = SONG.player1;
+		var bfSkinDir:String = '';
+		if (!isStoryMode && CharacterSelectState.selectedCharacter != null)
+		{
+			bfName = CharacterSelectState.selectedCharacter;
+			bfSkinDir = CharacterSelectState.selectedSkinDir;
+		}
+
+		// Si es una skin de mods/skins, buscar sus archivos en su carpeta
+		var prevModDir:String = Mods.currentModDirectory;
+		if (bfSkinDir != '')
+		{
+			Mods.currentModDirectory = bfSkinDir;
+			Paths.pathCache.clear();
+		}
+		boyfriend = new Character(0, 0, bfName, true);
+		if (bfSkinDir != '')
+		{
+			Mods.currentModDirectory = prevModDir;
+			Paths.pathCache.clear();
+		}
 		startCharacterPos(boyfriend);
 		boyfriendGroup.add(boyfriend);
 		startCharacterScripts(boyfriend.curCharacter);

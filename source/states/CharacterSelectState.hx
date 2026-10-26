@@ -18,20 +18,25 @@ typedef SelectableChar =
 {
 	var id:String; // nombre del JSON en characters/ (sin .json)
 	var name:String; // nombre que se muestra en pantalla
+	var dir:String; // '' = personaje del juego; 'skins/NombreCarpeta' = skin de mods/skins
 }
 
 class CharacterSelectState extends MusicBeatState
 {
 	// Personaje elegido. PlayState lo lee. null = usar el de la canción.
 	public static var selectedCharacter:String = null;
+	public static var selectedSkinDir:String = ''; // carpeta de la skin elegida ('' = ninguna)
 	public static var curSelected:Int = 0;
 
-	// >>> EDITA ESTA LISTA CON TUS PERSONAJES <<<
-	public static var characters:Array<SelectableChar> = [
-		{id: 'bf', name: 'Boyfriend'},
-		{id: 'bf-christmas', name: 'Boyfriend Navidad'},
-		{id: 'bf-car', name: 'Boyfriend Auto'}
+	// >>> EDITA ESTA LISTA CON LOS PERSONAJES QUE VIENEN EN TU JUEGO <<<
+	public static var baseCharacters:Array<SelectableChar> = [
+		{id: 'bf', name: 'Boyfriend', dir: ''},
+		{id: 'bf-christmas', name: 'Boyfriend Navidad', dir: ''},
+		{id: 'bf-car', name: 'Boyfriend Auto', dir: ''}
 	];
+
+	// Lista completa = los de arriba + las skins que encuentre en mods/skins
+	public static var characters:Array<SelectableChar> = [];
 
 	// Dónde pisa el personaje sobre el escenario (centro X, base Y)
 	static inline var CHAR_X:Float = 640;
@@ -71,6 +76,8 @@ class CharacterSelectState extends MusicBeatState
 	override function create()
 	{
 		persistentUpdate = persistentDraw = true;
+
+		loadSkins();
 
 		if (curSelected >= characters.length || curSelected < 0)
 			curSelected = 0;
@@ -182,6 +189,7 @@ class CharacterSelectState extends MusicBeatState
 			{
 				selected = true;
 				selectedCharacter = characters[curSelected].id;
+				selectedSkinDir = characters[curSelected].dir;
 				FlxG.sound.play(Paths.sound('confirmMenu'));
 				hintText.text = '¡Seleccionado!';
 
@@ -210,6 +218,58 @@ class CharacterSelectState extends MusicBeatState
 		super.update(elapsed);
 	}
 
+	// Busca skins en mods/skins/<carpeta>/characters/*.json
+	function loadSkins()
+	{
+		characters = baseCharacters.copy();
+
+		#if MODS_ALLOWED
+		var root:String = Paths.mods('skins');
+		if (!FileSystem.exists(root) || !FileSystem.isDirectory(root))
+			return;
+
+		var folders:Array<String> = FileSystem.readDirectory(root);
+		folders.sort(function(a:String, b:String):Int return (a.toLowerCase() < b.toLowerCase()) ? -1 : 1);
+
+		for (folder in folders)
+		{
+			var charDir:String = root + '/' + folder + '/characters';
+			if (!FileSystem.exists(charDir) || !FileSystem.isDirectory(charDir))
+				continue;
+
+			// nombre base -> ¿tiene versión "-player"?
+			var found:Map<String, Bool> = new Map();
+			var order:Array<String> = [];
+			for (file in FileSystem.readDirectory(charDir))
+			{
+				if (!file.endsWith('.json'))
+					continue;
+				var name:String = file.substr(0, file.length - 5);
+				var isPlayerVersion:Bool = name.endsWith('-player');
+				var base:String = isPlayerVersion ? name.substr(0, name.length - 7) : name;
+				if (!found.exists(base))
+				{
+					found.set(base, false);
+					order.push(base);
+				}
+				if (isPlayerVersion)
+					found.set(base, true);
+			}
+			order.sort(function(a:String, b:String):Int return (a.toLowerCase() < b.toLowerCase()) ? -1 : 1);
+
+			for (base in order)
+			{
+				characters.push({
+					// Para jugar de lado del jugador se usa la versión "-player" si existe
+					id: found.get(base) ? base + '-player' : base,
+					name: base.replace('-', ' ').replace('_', ' '),
+					dir: 'skins/' + folder
+				});
+			}
+		}
+		#end
+	}
+
 	function changeSelection(change:Int = 0, playSound:Bool = true)
 	{
 		curSelected += change;
@@ -235,9 +295,23 @@ class CharacterSelectState extends MusicBeatState
 	function updateTexts()
 	{
 		nameText.text = characters[curSelected].name;
+		var entry:SelectableChar = characters[curSelected];
 		counterText.text = (curSelected + 1) + ' / ' + characters.length;
+		if (entry.dir != '')
+			counterText.text += '  -  ' + entry.dir.substr(entry.dir.indexOf('/') + 1);
 
+		var prevDir:String = Mods.currentModDirectory;
+		if (entry.dir != '')
+		{
+			Mods.currentModDirectory = entry.dir;
+			Paths.pathCache.clear();
+		}
 		icon.changeIcon(preview.healthIcon);
+		if (entry.dir != '')
+		{
+			Mods.currentModDirectory = prevDir;
+			Paths.pathCache.clear();
+		}
 		icon.screenCenter(X);
 		icon.y = FlxG.height - icon.height - 40;
 	}
@@ -252,8 +326,23 @@ class CharacterSelectState extends MusicBeatState
 			preview.destroy();
 		}
 
+		// Si es una skin, buscar sus archivos dentro de su carpeta
+		var entry:SelectableChar = characters[curSelected];
+		var prevDir:String = Mods.currentModDirectory;
+		if (entry.dir != '')
+		{
+			Mods.currentModDirectory = entry.dir;
+			Paths.pathCache.clear();
+		}
+
 		// true = igual que en PlayState (jugador)
-		preview = new Character(0, 0, characters[curSelected].id, true);
+		preview = new Character(0, 0, entry.id, true);
+
+		if (entry.dir != '')
+		{
+			Mods.currentModDirectory = prevDir;
+			Paths.pathCache.clear();
+		}
 		preview.scrollFactor.set();
 
 		// Reducir si el personaje es muy grande
