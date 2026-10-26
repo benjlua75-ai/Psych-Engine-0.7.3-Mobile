@@ -332,6 +332,11 @@ class FreeplayState extends MusicBeatState
 			openSubState(new GameplayChangersSubstate());
 			#if mobile removeVirtualPad(); #end
 		}
+		else if(FlxG.keys.justPressed.TAB #if mobile || virtualPad.getButton('buttonY').justPressed #end && !player.playingMusic)
+		{
+			// Abrir la selección de personaje
+			MusicBeatState.switchState(new CharacterSelectState());
+		}
 		else if(FlxG.keys.justPressed.SPACE #if mobile || virtualPad.getButton('buttonX').justPressed #end)
 		{
 			if(instPlaying != curSelected && !player.playingMusic)
@@ -416,7 +421,7 @@ class FreeplayState extends MusicBeatState
 				super.update(elapsed);
 				return;
 			}
-			MusicBeatState.switchState(new CharacterSelectState());
+			LoadingState.loadAndSwitchState(new PlayState());
 
 			FlxG.sound.music.volume = 0;
 					

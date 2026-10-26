@@ -190,8 +190,8 @@ class CharacterSelectState extends MusicBeatState
 
 				new FlxTimer().start(0.9, function(tmr:FlxTimer)
 				{
-					// PlayState.SONG ya fue cargado por FreeplayState
-					LoadingState.loadAndSwitchState(new PlayState());
+					// Volver a Freeplay; la canción se elige y se inicia desde ahí
+					MusicBeatState.switchState(new FreeplayState());
 				});
 			}
 		}
