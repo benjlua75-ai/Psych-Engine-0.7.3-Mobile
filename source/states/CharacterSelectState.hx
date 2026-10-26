@@ -33,15 +33,40 @@ class CharacterSelectState extends MusicBeatState
 		{id: 'bf-car', name: 'Boyfriend Auto'}
 	];
 
+	// Dónde pisa el personaje sobre el escenario (centro X, base Y)
+	static inline var CHAR_X:Float = 640;
+	static inline var CHAR_FEET_Y:Float = 520;
+	static inline var CHAR_MAX_H:Float = 330;
+
 	var bg:FlxSprite;
 	var preview:Character;
 	var icon:HealthIcon;
 	var nameText:FlxText;
 	var counterText:FlxText;
 	var hintText:FlxText;
+	var arrowLeft:FlxText;
+	var arrowRight:FlxText;
 
 	var selected:Bool = false;
 	var danceTime:Float = 0;
+
+	// Crea una imagen de la carpeta images/charSelect/ ajustada al ancho/alto de la pantalla
+	function addImage(file:String, ?fitWidth:Bool = true, y:Float = 0, alpha:Float = 1):FlxSprite
+	{
+		var spr:FlxSprite = new FlxSprite().loadGraphic(Paths.image('charSelect/' + file));
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		if (fitWidth)
+			spr.setGraphicSize(FlxG.width, 0);
+		else
+			spr.setGraphicSize(0, FlxG.height);
+		spr.updateHitbox();
+		spr.screenCenter(X);
+		spr.y = y;
+		spr.alpha = alpha;
+		spr.scrollFactor.set();
+		add(spr);
+		return spr;
+	}
 
 	override function create()
 	{
@@ -50,30 +75,41 @@ class CharacterSelectState extends MusicBeatState
 		if (curSelected >= characters.length || curSelected < 0)
 			curSelected = 0;
 
-		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		bg.antialiasing = ClientPrefs.data.antialiasing;
-		bg.setGraphicSize(FlxG.width, FlxG.height);
-		bg.updateHitbox();
-		bg.screenCenter();
-		bg.scrollFactor.set();
-		add(bg);
+		// ---- Fondo y escenario (de atrás hacia adelante) ----
+		bg = addImage('bg', false, 0);
+		addImage('crowd', true, 175);
+		addImage('stage', true, 368);
 
-		var title:FlxText = new FlxText(0, 20, FlxG.width, 'ELIGE TU PERSONAJE', 32);
-		title.setFormat(Paths.font('vcr.ttf'), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		title.scrollFactor.set();
-		add(title);
+		// Luz detrás del personaje
+		var light:FlxSprite = new FlxSprite().loadGraphic(Paths.image('charSelect/light'));
+		light.antialiasing = ClientPrefs.data.antialiasing;
+		light.setGraphicSize(520, 0);
+		light.updateHitbox();
+		light.x = CHAR_X - light.width / 2;
+		light.y = 250;
+		light.alpha = 0.7;
+		light.scrollFactor.set();
+		add(light);
 
-		nameText = new FlxText(0, FlxG.height - 150, FlxG.width, '', 40);
-		nameText.setFormat(Paths.font('vcr.ttf'), 40, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		// El personaje se crea y se agrega aquí, entre el escenario y el frente
+		changeSelection(0, false);
+
+		addImage('blur', true, 264, 0.6);
+		addImage('curtains', true, 0);
+
+		// ---- Textos e icono (siempre encima de todo) ----
+		nameText = new FlxText(0, 28, FlxG.width, '', 44);
+		nameText.setFormat(Paths.font('vcr.ttf'), 44, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		nameText.borderSize = 3;
 		nameText.scrollFactor.set();
 		add(nameText);
 
-		counterText = new FlxText(0, FlxG.height - 105, FlxG.width, '', 22);
+		counterText = new FlxText(0, 82, FlxG.width, '', 22);
 		counterText.setFormat(Paths.font('vcr.ttf'), 22, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		counterText.scrollFactor.set();
 		add(counterText);
 
-		hintText = new FlxText(0, 70, FlxG.width, #if mobile 'Desliza o usa las flechas' #else 'Izquierda / Derecha' #end, 18);
+		hintText = new FlxText(0, FlxG.height - 34, FlxG.width, #if mobile 'Toca las flechas o desliza' #else 'Izquierda / Derecha' #end, 18);
 		hintText.setFormat(Paths.font('vcr.ttf'), 18, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		hintText.scrollFactor.set();
 		add(hintText);
@@ -82,7 +118,20 @@ class CharacterSelectState extends MusicBeatState
 		icon.scrollFactor.set();
 		add(icon);
 
-		changeSelection(0, false);
+		// Flechas provisionales (cámbialas por tus dibujos cuando los tengas)
+		arrowLeft = new FlxText(30, 300, 120, '<', 120);
+		arrowLeft.setFormat(Paths.font('vcr.ttf'), 120, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		arrowLeft.borderSize = 4;
+		arrowLeft.scrollFactor.set();
+		add(arrowLeft);
+
+		arrowRight = new FlxText(FlxG.width - 150, 300, 120, '>', 120);
+		arrowRight.setFormat(Paths.font('vcr.ttf'), 120, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		arrowRight.borderSize = 4;
+		arrowRight.scrollFactor.set();
+		add(arrowRight);
+
+		updateTexts();
 
 		#if mobile
 		addVirtualPad('LEFT_RIGHT', 'A_B');
@@ -108,6 +157,19 @@ class CharacterSelectState extends MusicBeatState
 				else if (TouchUtil.swipeRight)
 					changeSelection(-1);
 			}
+			else if (TouchUtil.justPressed)
+			{
+				// Tocar las flechas de los lados
+				var tx:Float = TouchUtil.firstTouch.screenX;
+				var ty:Float = TouchUtil.firstTouch.screenY;
+				if (ty > 220 && ty < 480)
+				{
+					if (tx < 190)
+						changeSelection(-1);
+					else if (tx > FlxG.width - 190)
+						changeSelection(1);
+				}
+			}
 			#end
 
 			if (controls.BACK)
@@ -121,6 +183,7 @@ class CharacterSelectState extends MusicBeatState
 				selected = true;
 				selectedCharacter = characters[curSelected].id;
 				FlxG.sound.play(Paths.sound('confirmMenu'));
+				hintText.text = '¡Seleccionado!';
 
 				if (preview != null && preview.animOffsets.exists('hey'))
 					preview.playAnim('hey', true);
@@ -160,22 +223,31 @@ class CharacterSelectState extends MusicBeatState
 
 		loadPreview();
 
-		nameText.text = characters[curSelected].name;
-		counterText.text = (curSelected + 1) + ' / ' + characters.length;
-
-		icon.changeIcon(preview.healthIcon);
-		icon.screenCenter(X);
-		icon.y = nameText.y - icon.height - 5;
+		// Los textos aún no existen la primera vez (se llama desde create)
+		if (nameText != null)
+			updateTexts();
 
 		var c:Array<Int> = preview.healthColorArray;
 		FlxTween.cancelTweensOf(bg);
 		FlxTween.color(bg, 0.3, bg.color, FlxColor.fromRGB(c[0], c[1], c[2]), {ease: FlxEase.quadOut});
 	}
 
+	function updateTexts()
+	{
+		nameText.text = characters[curSelected].name;
+		counterText.text = (curSelected + 1) + ' / ' + characters.length;
+
+		icon.changeIcon(preview.healthIcon);
+		icon.screenCenter(X);
+		icon.y = FlxG.height - icon.height - 40;
+	}
+
 	function loadPreview()
 	{
+		var index:Int = -1;
 		if (preview != null)
 		{
+			index = members.indexOf(preview);
 			remove(preview, true);
 			preview.destroy();
 		}
@@ -184,19 +256,24 @@ class CharacterSelectState extends MusicBeatState
 		preview = new Character(0, 0, characters[curSelected].id, true);
 		preview.scrollFactor.set();
 
-		// Reducir si el personaje es muy grande para el espacio disponible
-		var maxH:Float = FlxG.height * 0.45;
-		if (preview.frameHeight > maxH)
+		// Reducir si el personaje es muy grande
+		if (preview.frameHeight > CHAR_MAX_H)
 		{
-			var s:Float = maxH / preview.frameHeight;
+			var s:Float = CHAR_MAX_H / preview.frameHeight;
 			preview.scale.set(s, s);
 			preview.updateHitbox();
 		}
 
-		preview.screenCenter();
-		preview.y -= 40;
+		// Pies sobre el escenario, centrado
+		preview.x = CHAR_X - preview.width / 2;
+		preview.y = CHAR_FEET_Y - preview.height;
 		preview.dance();
 		danceTime = 0;
-		add(preview);
+
+		// Mantener la capa (entre el escenario y el frente) al cambiar de personaje
+		if (index >= 0)
+			insert(index, preview);
+		else
+			add(preview);
 	}
 }
